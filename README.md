@@ -1,4 +1,4 @@
-Special Characters Identifiers - And Fix the References
+Special Characters Identifiers - Fix the References
 
 <html lang="en">
 
