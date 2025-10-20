@@ -40,9 +40,7 @@
     text-decoration: none;
   }
   a:hover { text-decoration: underline; }
-  #output {
-    margin-top: 15px;
-  }
+  #output { margin-top: 15px; }
   .part-info {
     font-size: 14px;
     color: #555;
@@ -87,7 +85,7 @@ function splitFile() {
 
   reader.onload = function(e) {
     const text = e.target.result;
-    // Split by double line breaks (blank lines between author entries)
+    // Split by double line breaks (each author entry separated by blank line)
     const entries = text.split(/\n\s*\n/).filter(e => e.trim() !== "");
     splitFiles = [];
     const outputDiv = document.getElementById('output');
@@ -99,9 +97,9 @@ function splitFile() {
       const blob = new Blob([partText], {type: "text/plain"});
       const partNum = Math.floor(i / entryCount) + 1;
       const countInPart = partEntries.length;
-      const fileName = `${baseFileName}_part${partNum}.txt`;
+      const fileName = `${baseFileName}_part${partNum}_${countInPart}.txt`;
 
-      // Create info text and download link
+      // Info + download link
       const info = document.createElement("div");
       info.className = "part-info";
       info.textContent = `Part ${partNum} — ${countInPart} entries`;
@@ -118,7 +116,7 @@ function splitFile() {
       splitFiles.push({blob, fileName});
     }
 
-    // Show download all button
+    // Show download all button if more than 1 file
     document.getElementById('downloadAllBtn').style.display =
       splitFiles.length > 1 ? 'inline-block' : 'none';
   };
