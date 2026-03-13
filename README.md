@@ -169,7 +169,60 @@
       padding: 10px 12px;
       font-size: 0.9rem;
       line-height: 1.4;
-      white-space: pre-line;
+    }
+
+    .status-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .status-item {
+      background: #f5fff8;
+      border: 1px solid #d7f2e0;
+      border-radius: 8px;
+      padding: 8px;
+    }
+
+    .status-item strong {
+      display: block;
+      font-size: 1rem;
+      line-height: 1.2;
+    }
+
+    .status-item span {
+      font-size: 0.78rem;
+      color: #2f6f45;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .status-note {
+      margin: 0 0 10px;
+    }
+
+    .download-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .download-actions button {
+      background: #166534;
+      color: #fff;
+      padding: 8px 12px;
+      font-size: 0.84rem;
+    }
+
+    .download-actions button:hover {
+      background: #14532d;
     }
   </style>
 </head>
@@ -237,6 +290,7 @@ unsubscribe@example.com"></textarea>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
     let splitFiles = [];
+    let removalDownloads = null;
 
     function readFileAsText(file) {
       return new Promise((resolve, reject) => {
@@ -506,14 +560,54 @@ unsubscribe@example.com"></textarea>
       const removedCount = entries.length - keptEntries.length;
       const outputName = `${entriesFile.name.replace(/\.[^/.]+$/, "")}_Clean.txt`;
 
-      downloadTextFile(keptEntries.join("\n\n"), outputName);
+      const removedOutputName = `${entriesFile.name.replace(/\.[^/.]+$/, "")}_Removed.txt`;
+
+      removalDownloads = {
+        remaining: {
+          content: keptEntries.join("\n\n"),
+          fileName: outputName
+        },
+        removed: {
+          content: entries.filter(entry => entryHasRemovalEmail(entry, removalSet)).join("\n\n"),
+          fileName: removedOutputName
+        }
+      };
 
       const bounceStatusLine = matchedBounceFormat
         ? `Bounced emails detected in log file: ${bouncedCount}`
         : "Bounced emails detected in log file: Not found (used all emails from remove file)";
 
       statusBox.className = "status";
-      statusBox.textContent = `Done.\n${bounceStatusLine}\nTotal entries: ${entries.length}\nRemoved entries: ${removedCount}\nRemaining entries: ${keptEntries.length}\nDownloaded file: ${outputName}`;
+      statusBox.innerHTML = `
+        <div class="status-title">Done ✅</div>
+        <div class="status-grid">
+          <div class="status-item"><strong>${entries.length}</strong><span>Total entries</span></div>
+          <div class="status-item"><strong>${removedCount}</strong><span>Removed entries</span></div>
+          <div class="status-item"><strong>${keptEntries.length}</strong><span>Remaining entries</span></div>
+          <div class="status-item"><strong>${matchedBounceFormat ? bouncedCount : "N/A"}</strong><span>Bounced emails in log</span></div>
+        </div>
+        <p class="status-note">${bounceStatusLine}</p>
+        <div class="download-actions">
+          <button type="button" onclick="downloadRemovedEntries()">Download removed entries</button>
+          <button type="button" onclick="downloadRemainingEntries()">Download remaining entries</button>
+        </div>
+      `;
+    }
+
+    function downloadRemovedEntries() {
+      if (!removalDownloads?.removed) {
+        alert("No removed entries are available yet.");
+        return;
+      }
+      downloadTextFile(removalDownloads.removed.content, removalDownloads.removed.fileName);
+    }
+
+    function downloadRemainingEntries() {
+      if (!removalDownloads?.remaining) {
+        alert("No remaining entries are available yet.");
+        return;
+      }
+      downloadTextFile(removalDownloads.remaining.content, removalDownloads.remaining.fileName);
     }
   </script>
 </body>
