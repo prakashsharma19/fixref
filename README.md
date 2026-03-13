@@ -355,17 +355,29 @@ unsubscribe@example.com"></textarea>
       return values;
     }
 
+    function normalizeHeaderName(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+    }
+
+    function findColumnIndex(headerRow, aliases) {
+      const normalizedAliases = aliases.map(normalizeHeaderName);
+      return headerRow.findIndex((name) => normalizedAliases.includes(name));
+    }
+
     function getBouncedEmailsFromRows(rows) {
       if (!rows.length) {
-        return { emails: new Set(), bouncedCount: 0 };
+        return { emails: new Set(), bouncedCount: 0, matchedBounceFormat: false };
       }
 
-      const headerRow = rows[0].map(value => String(value || "").trim().toLowerCase());
-      const eventTypeIndex = headerRow.indexOf("eventtype");
-      const toIndex = headerRow.indexOf("to");
+      const headerRow = rows[0].map(normalizeHeaderName);
+      const eventTypeIndex = findColumnIndex(headerRow, ["eventtype", "event", "status", "type"]);
+      const toIndex = findColumnIndex(headerRow, ["to", "recipient", "email", "recipientemail", "toemail"]);
 
       if (eventTypeIndex === -1 || toIndex === -1) {
-        return { emails: new Set(), bouncedCount: 0 };
+        return { emails: new Set(), bouncedCount: 0, matchedBounceFormat: false };
       }
 
       const bouncedEmails = new Set();
@@ -373,7 +385,7 @@ unsubscribe@example.com"></textarea>
 
       rows.slice(1).forEach((row) => {
         const eventType = String(row[eventTypeIndex] || "").trim().toLowerCase();
-        if (eventType !== "bounced") {
+        if (!eventType.includes("bounce")) {
           return;
         }
 
@@ -382,7 +394,7 @@ unsubscribe@example.com"></textarea>
         parseEmailsFromText(toValue).forEach(email => bouncedEmails.add(email));
       });
 
-      return { emails: bouncedEmails, bouncedCount };
+      return { emails: bouncedEmails, bouncedCount, matchedBounceFormat: true };
     }
 
     async function getRemovalDataFromFile(file) {
@@ -404,14 +416,34 @@ unsubscribe@example.com"></textarea>
 
         const buffer = await file.arrayBuffer();
         const workbook = XLSX.read(buffer, { type: "array" });
-        const firstSheetName = workbook.SheetNames[0];
-        const firstSheet = workbook.Sheets[firstSheetName];
-        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, blankrows: false });
-        return getBouncedEmailsFromRows(rows);
+
+        const mergedData = { emails: new Set(), bouncedCount: 0, matchedBounceFormat: false };
+
+        workbook.SheetNames.forEach((sheetName) => {
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false });
+          const result = getBouncedEmailsFromRows(rows);
+
+          result.emails.forEach(email => mergedData.emails.add(email));
+          mergedData.bouncedCount += result.bouncedCount;
+          mergedData.matchedBounceFormat = mergedData.matchedBounceFormat || result.matchedBounceFormat;
+        });
+
+        if (!mergedData.matchedBounceFormat) {
+          const allCellText = workbook.SheetNames
+            .map(sheetName => {
+              const sheet = workbook.Sheets[sheetName];
+              return XLSX.utils.sheet_to_csv(sheet);
+            })
+            .join("\n");
+          return { emails: parseEmailsFromText(allCellText), bouncedCount: 0, matchedBounceFormat: false };
+        }
+
+        return mergedData;
       }
 
       const text = await readFileAsText(file);
-      return { emails: parseEmailsFromText(text), bouncedCount: 0 };
+      return { emails: parseEmailsFromText(text), bouncedCount: 0, matchedBounceFormat: false };
     }
 
     function entryHasRemovalEmail(entry, removalSet) {
@@ -442,12 +474,14 @@ unsubscribe@example.com"></textarea>
 
       const removalSet = parseEmailsFromText(manualEmails.trim());
       let bouncedCount = 0;
+      let matchedBounceFormat = false;
 
       if (removeFile) {
         try {
           const removeFileData = await getRemovalDataFromFile(removeFile);
           removeFileData.emails.forEach(email => removalSet.add(email));
           bouncedCount = removeFileData.bouncedCount;
+          matchedBounceFormat = Boolean(removeFileData.matchedBounceFormat);
         } catch {
           alert("Could not read remove entries file.");
           return;
@@ -474,8 +508,12 @@ unsubscribe@example.com"></textarea>
 
       downloadTextFile(keptEntries.join("\n\n"), outputName);
 
+      const bounceStatusLine = matchedBounceFormat
+        ? `Bounced emails detected in log file: ${bouncedCount}`
+        : "Bounced emails detected in log file: Not found (used all emails from remove file)";
+
       statusBox.className = "status";
-      statusBox.textContent = `Done.\nBounced emails detected in log file: ${bouncedCount}\nTotal entries: ${entries.length}\nRemoved entries: ${removedCount}\nRemaining entries: ${keptEntries.length}\nDownloaded file: ${outputName}`;
+      statusBox.textContent = `Done.\n${bounceStatusLine}\nTotal entries: ${entries.length}\nRemoved entries: ${removedCount}\nRemaining entries: ${keptEntries.length}\nDownloaded file: ${outputName}`;
     }
   </script>
 </body>
