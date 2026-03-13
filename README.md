@@ -1,135 +1,391 @@
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Author Entries Splitter</title>
-<style>
-  body {
-    font-family: Arial, sans-serif;
-    background: #f8f9fa;
-    margin: 40px;
-    color: #333;
-  }
-  h2 { color: #007bff; }
-  .container {
-    background: #fff;
-    padding: 25px;
-    border-radius: 12px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    max-width: 750px;
-    margin: auto;
-  }
-  input, button {
-    margin: 10px 5px 0 0;
-    padding: 10px 14px;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-  }
-  button {
-    background-color: #007bff;
-    color: white;
-    border: none;
-    cursor: pointer;
-  }
-  button:hover { background-color: #0056b3; }
-  a {
-    display: inline-block;
-    margin: 5px 0;
-    color: #007bff;
-    text-decoration: none;
-  }
-  a:hover { text-decoration: underline; }
-  #output { margin-top: 15px; }
-  .part-info {
-    font-size: 14px;
-    color: #555;
-    margin-bottom: 5px;
-  }
-</style>
-</head>
-<body>
-<div class="container">
-  <h2>Author Entries Splitter Tool</h2>
-  <p>Upload your <b>.txt</b> file containing author entries:</p>
-  <input type="file" id="fileInput" accept=".txt">
-  <br>
-  <label for="entryCount">Entries per file:</label>
-  <input type="number" id="entryCount" value="690" min="10" style="width:100px;">
-  <br>
-  <button onclick="splitFile()">Split File</button>
-  <button id="downloadAllBtn" style="display:none;" onclick="downloadAll()">Download All Files</button>
-  <div id="output"></div>
-</div>
-
-<script>
-let splitFiles = [];
-let baseFileName = "";
-
-function splitFile() {
-  const fileInput = document.getElementById('fileInput');
-  const file = fileInput.files[0];
-  if (!file) {
-    alert("Please select a text file first.");
-    return;
-  }
-  
-  const entryCount = parseInt(document.getElementById('entryCount').value);
-  if (!entryCount || entryCount <= 0) {
-    alert("Please enter a valid number of entries per file.");
-    return;
-  }
-
-  baseFileName = file.name.replace(/\.[^/.]+$/, ""); // remove extension
-  const reader = new FileReader();
-
-  reader.onload = function(e) {
-    const text = e.target.result;
-    // Split by double line breaks (each author entry separated by blank line)
-    const entries = text.split(/\n\s*\n/).filter(e => e.trim() !== "");
-    splitFiles = [];
-    const outputDiv = document.getElementById('output');
-    outputDiv.innerHTML = "";
-
-    for (let i = 0; i < entries.length; i += entryCount) {
-      const partEntries = entries.slice(i, i + entryCount);
-      const partText = partEntries.join("\n\n");
-      const blob = new Blob([partText], {type: "text/plain"});
-      const partNum = Math.floor(i / entryCount) + 1;
-      const countInPart = partEntries.length;
-      const fileName = `${baseFileName}_part${partNum}_${countInPart}.txt`;
-
-      // Info + download link
-      const info = document.createElement("div");
-      info.className = "part-info";
-      info.textContent = `Part ${partNum} — ${countInPart} entries`;
-
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = fileName;
-      link.textContent = `Download ${fileName}`;
-
-      outputDiv.appendChild(info);
-      outputDiv.appendChild(link);
-      outputDiv.appendChild(document.createElement("br"));
-
-      splitFiles.push({blob, fileName});
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Author Entries Splitter Tool</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --surface: #ffffff;
+      --surface-soft: #f8faff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #1d4ed8;
+      --primary-dark: #1e40af;
+      --border: #dbe4f2;
+      --success-bg: #ecfdf3;
+      --success-text: #166534;
     }
 
-    // Show download all button if more than 1 file
-    document.getElementById('downloadAllBtn').style.display =
-      splitFiles.length > 1 ? 'inline-block' : 'none';
-  };
-  reader.readAsText(file);
-}
+    * { box-sizing: border-box; }
 
-function downloadAll() {
-  splitFiles.forEach(file => {
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(file.blob);
-    link.download = file.fileName;
-    link.click();
-  });
-}
-</script>
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", Arial, sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #eef4ff 0%, var(--bg) 25%, var(--bg) 100%);
+      min-height: 100vh;
+      padding: 30px 16px 50px;
+    }
+
+    .page {
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 3vw, 2.1rem);
+      color: #0f172a;
+      letter-spacing: 0.2px;
+    }
+
+    .hero p {
+      margin: 10px auto 0;
+      color: var(--muted);
+      max-width: 680px;
+      line-height: 1.45;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+      align-items: start;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(17, 24, 39, 0.06);
+      padding: 20px;
+    }
+
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 1.1rem;
+      color: #0f172a;
+    }
+
+    .card p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    label {
+      font-size: 0.88rem;
+      color: #374151;
+      font-weight: 600;
+    }
+
+    input[type="file"],
+    input[type="number"],
+    textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: var(--surface-soft);
+      color: var(--text);
+      font-size: 0.92rem;
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.15s ease;
+      background: var(--primary);
+      color: #fff;
+    }
+
+    button:hover { background: var(--primary-dark); }
+
+    button.secondary {
+      background: #e5edff;
+      color: #1d4ed8;
+    }
+
+    button.secondary:hover {
+      background: #dbe7ff;
+      color: #1e3a8a;
+    }
+
+    .output {
+      margin-top: 14px;
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+    }
+
+    .part-item {
+      margin-bottom: 9px;
+      font-size: 0.92rem;
+    }
+
+    a {
+      color: #1d4ed8;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    .status {
+      margin-top: 10px;
+      border: 1px solid #b7e4c7;
+      background: var(--success-bg);
+      color: var(--success-text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.9rem;
+      line-height: 1.4;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <h1>Author Entries Splitter Tool</h1>
+      <p>
+        Split large author-entry files into parts and remove unsubscribed or bounced email entries in one clean workspace.
+      </p>
+    </header>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Split Entries File</h2>
+        <p>Upload an entries file and choose how many entries should be included in each output file.</p>
+
+        <div class="field">
+          <label for="fileInput">Entries file (.txt)</label>
+          <input type="file" id="fileInput" accept=".txt" />
+        </div>
+
+        <div class="field">
+          <label for="entryCount">Entries per file</label>
+          <input type="number" id="entryCount" value="690" min="1" />
+        </div>
+
+        <div class="actions">
+          <button onclick="splitFile()">Split File</button>
+          <button id="downloadAllBtn" class="secondary" style="display:none;" onclick="downloadAll()">Download All Files</button>
+        </div>
+
+        <div id="splitOutput" class="output"></div>
+      </article>
+
+      <article class="card">
+        <h2>Remove Unsubscribed/Bounced Entries</h2>
+        <p>Upload entries plus removal emails (file or pasted list), then download a cleaned entries file.</p>
+
+        <div class="field">
+          <label for="entriesFile">1) Entries file (.txt)</label>
+          <input type="file" id="entriesFile" accept=".txt" />
+        </div>
+
+        <div class="field">
+          <label for="removeFile">2) Remove entries file (.txt, optional)</label>
+          <input type="file" id="removeFile" accept=".txt" />
+        </div>
+
+        <div class="field">
+          <label for="removeEmailsText">Or paste emails to remove (one per line / comma-separated)</label>
+          <textarea id="removeEmailsText" placeholder="bounce@example.com
+unsubscribe@example.com"></textarea>
+        </div>
+
+        <div class="actions">
+          <button onclick="removeEntriesAndDownload()">Remove &amp; Download Clean File</button>
+        </div>
+
+        <div id="removeStatus"></div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    let splitFiles = [];
+
+    function readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target.result || "");
+        reader.onerror = () => reject(new Error("Could not read file."));
+        reader.readAsText(file);
+      });
+    }
+
+    function splitEntries(text) {
+      return text
+        .split(/\r?\n\s*\r?\n/)
+        .map(entry => entry.trim())
+        .filter(Boolean);
+    }
+
+    function splitFile() {
+      const file = document.getElementById("fileInput").files[0];
+      const entryCount = Number.parseInt(document.getElementById("entryCount").value, 10);
+
+      if (!file) {
+        alert("Please select an entries file to split.");
+        return;
+      }
+
+      if (!entryCount || entryCount <= 0) {
+        alert("Please enter a valid entries-per-file number.");
+        return;
+      }
+
+      readFileAsText(file).then((text) => {
+        const entries = splitEntries(text);
+        const output = document.getElementById("splitOutput");
+        const downloadAllButton = document.getElementById("downloadAllBtn");
+
+        splitFiles = [];
+        output.innerHTML = "";
+
+        const baseName = file.name.replace(/\.[^/.]+$/, "");
+
+        for (let i = 0; i < entries.length; i += entryCount) {
+          const partEntries = entries.slice(i, i + entryCount);
+          const partNumber = Math.floor(i / entryCount) + 1;
+          const fileName = `${baseName}_part${partNumber}_${partEntries.length}.txt`;
+          const blob = new Blob([partEntries.join("\n\n")], { type: "text/plain" });
+          const url = URL.createObjectURL(blob);
+
+          const row = document.createElement("div");
+          row.className = "part-item";
+
+          const label = document.createElement("span");
+          label.textContent = `Part ${partNumber} — ${partEntries.length} entries — `;
+
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = fileName;
+          link.textContent = `Download ${fileName}`;
+
+          row.appendChild(label);
+          row.appendChild(link);
+          output.appendChild(row);
+
+          splitFiles.push({ blob, fileName });
+        }
+
+        downloadAllButton.style.display = splitFiles.length > 1 ? "inline-block" : "none";
+      }).catch(() => {
+        alert("Unable to process the selected file.");
+      });
+    }
+
+    function downloadAll() {
+      splitFiles.forEach((file) => {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(file.blob);
+        link.download = file.fileName;
+        link.click();
+      });
+    }
+
+    function parseEmailsFromText(text) {
+      const matches = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+      return new Set(matches.map(email => email.toLowerCase().trim()));
+    }
+
+    function entryHasRemovalEmail(entry, removalSet) {
+      const emails = entry.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+      return emails.some(email => removalSet.has(email.toLowerCase().trim()));
+    }
+
+    function downloadTextFile(content, filename) {
+      const blob = new Blob([content], { type: "text/plain" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+    }
+
+    async function removeEntriesAndDownload() {
+      const entriesFile = document.getElementById("entriesFile").files[0];
+      const removeFile = document.getElementById("removeFile").files[0];
+      const manualEmails = document.getElementById("removeEmailsText").value;
+      const statusBox = document.getElementById("removeStatus");
+
+      statusBox.innerHTML = "";
+
+      if (!entriesFile) {
+        alert("Please upload the entries file first.");
+        return;
+      }
+
+      const removalSources = [manualEmails.trim()];
+
+      if (removeFile) {
+        try {
+          const removeFileText = await readFileAsText(removeFile);
+          removalSources.push(removeFileText);
+        } catch {
+          alert("Could not read remove entries file.");
+          return;
+        }
+      }
+
+      const removalSet = parseEmailsFromText(removalSources.join("\n"));
+
+      if (!removalSet.size) {
+        alert("Please provide at least one valid email in remove entries file or text box.");
+        return;
+      }
+
+      let entriesText = "";
+      try {
+        entriesText = await readFileAsText(entriesFile);
+      } catch {
+        alert("Could not read entries file.");
+        return;
+      }
+
+      const entries = splitEntries(entriesText);
+      const keptEntries = entries.filter(entry => !entryHasRemovalEmail(entry, removalSet));
+      const removedCount = entries.length - keptEntries.length;
+      const outputName = `${entriesFile.name.replace(/\.[^/.]+$/, "")}_Clean.txt`;
+
+      downloadTextFile(keptEntries.join("\n\n"), outputName);
+
+      statusBox.className = "status";
+      statusBox.textContent = `Done.\nTotal entries: ${entries.length}\nRemoved entries: ${removedCount}\nRemaining entries: ${keptEntries.length}\nDownloaded file: ${outputName}`;
+    }
+  </script>
 </body>
 </html>
