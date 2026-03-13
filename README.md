@@ -215,8 +215,8 @@
         </div>
 
         <div class="field">
-          <label for="removeFile">2) Remove entries file (.txt, optional)</label>
-          <input type="file" id="removeFile" accept=".txt" />
+          <label for="removeFile">2) Remove entries file (.txt, .csv, .xls, .xlsx, optional)</label>
+          <input type="file" id="removeFile" accept=".txt,.csv,.xls,.xlsx" />
         </div>
 
         <div class="field">
@@ -234,6 +234,7 @@ unsubscribe@example.com"></textarea>
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
     let splitFiles = [];
 
@@ -322,6 +323,97 @@ unsubscribe@example.com"></textarea>
       return new Set(matches.map(email => email.toLowerCase().trim()));
     }
 
+    function parseCsvLine(line) {
+      const values = [];
+      let current = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i += 1) {
+        const char = line[i];
+
+        if (char === '"') {
+          const nextChar = line[i + 1];
+          if (inQuotes && nextChar === '"') {
+            current += '"';
+            i += 1;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+
+        if (char === "," && !inQuotes) {
+          values.push(current.trim());
+          current = "";
+          continue;
+        }
+
+        current += char;
+      }
+
+      values.push(current.trim());
+      return values;
+    }
+
+    function getBouncedEmailsFromRows(rows) {
+      if (!rows.length) {
+        return { emails: new Set(), bouncedCount: 0 };
+      }
+
+      const headerRow = rows[0].map(value => String(value || "").trim().toLowerCase());
+      const eventTypeIndex = headerRow.indexOf("eventtype");
+      const toIndex = headerRow.indexOf("to");
+
+      if (eventTypeIndex === -1 || toIndex === -1) {
+        return { emails: new Set(), bouncedCount: 0 };
+      }
+
+      const bouncedEmails = new Set();
+      let bouncedCount = 0;
+
+      rows.slice(1).forEach((row) => {
+        const eventType = String(row[eventTypeIndex] || "").trim().toLowerCase();
+        if (eventType !== "bounced") {
+          return;
+        }
+
+        bouncedCount += 1;
+        const toValue = String(row[toIndex] || "");
+        parseEmailsFromText(toValue).forEach(email => bouncedEmails.add(email));
+      });
+
+      return { emails: bouncedEmails, bouncedCount };
+    }
+
+    async function getRemovalDataFromFile(file) {
+      const extension = file.name.split(".").pop()?.toLowerCase() || "";
+
+      if (extension === "csv") {
+        const csvText = await readFileAsText(file);
+        const rows = csvText
+          .split(/\r?\n/)
+          .filter(line => line.trim())
+          .map(parseCsvLine);
+        return getBouncedEmailsFromRows(rows);
+      }
+
+      if (extension === "xls" || extension === "xlsx") {
+        if (typeof XLSX === "undefined") {
+          throw new Error("Excel parser library is unavailable.");
+        }
+
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const firstSheetName = workbook.SheetNames[0];
+        const firstSheet = workbook.Sheets[firstSheetName];
+        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, blankrows: false });
+        return getBouncedEmailsFromRows(rows);
+      }
+
+      const text = await readFileAsText(file);
+      return { emails: parseEmailsFromText(text), bouncedCount: 0 };
+    }
+
     function entryHasRemovalEmail(entry, removalSet) {
       const emails = entry.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
       return emails.some(email => removalSet.has(email.toLowerCase().trim()));
@@ -348,19 +440,19 @@ unsubscribe@example.com"></textarea>
         return;
       }
 
-      const removalSources = [manualEmails.trim()];
+      const removalSet = parseEmailsFromText(manualEmails.trim());
+      let bouncedCount = 0;
 
       if (removeFile) {
         try {
-          const removeFileText = await readFileAsText(removeFile);
-          removalSources.push(removeFileText);
+          const removeFileData = await getRemovalDataFromFile(removeFile);
+          removeFileData.emails.forEach(email => removalSet.add(email));
+          bouncedCount = removeFileData.bouncedCount;
         } catch {
           alert("Could not read remove entries file.");
           return;
         }
       }
-
-      const removalSet = parseEmailsFromText(removalSources.join("\n"));
 
       if (!removalSet.size) {
         alert("Please provide at least one valid email in remove entries file or text box.");
@@ -383,7 +475,7 @@ unsubscribe@example.com"></textarea>
       downloadTextFile(keptEntries.join("\n\n"), outputName);
 
       statusBox.className = "status";
-      statusBox.textContent = `Done.\nTotal entries: ${entries.length}\nRemoved entries: ${removedCount}\nRemaining entries: ${keptEntries.length}\nDownloaded file: ${outputName}`;
+      statusBox.textContent = `Done.\nBounced emails detected in log file: ${bouncedCount}\nTotal entries: ${entries.length}\nRemoved entries: ${removedCount}\nRemaining entries: ${keptEntries.length}\nDownloaded file: ${outputName}`;
     }
   </script>
 </body>
