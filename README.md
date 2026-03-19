@@ -263,13 +263,13 @@
         <p>Upload entries plus removal emails (file or pasted list), then download a cleaned entries file.</p>
 
         <div class="field">
-          <label for="entriesFile">1) Entries file (.txt)</label>
-          <input type="file" id="entriesFile" accept=".txt" />
+          <label for="entriesFile">1) Entries file(s) (.txt)</label>
+          <input type="file" id="entriesFile" accept=".txt" multiple />
         </div>
 
         <div class="field">
-          <label for="removeFile">2) Remove entries file (.txt, .csv, .xls, .xlsx, optional)</label>
-          <input type="file" id="removeFile" accept=".txt,.csv,.xls,.xlsx" />
+          <label for="removeFile">2) Remove entries file(s) (.txt, .csv, .xls, .xlsx, optional)</label>
+          <input type="file" id="removeFile" accept=".txt,.csv,.xls,.xlsx" multiple />
         </div>
 
         <div class="field">
@@ -513,16 +513,28 @@ unsubscribe@example.com"></textarea>
       link.click();
     }
 
+    function buildCombinedBaseName(files, fallback) {
+      if (!files.length) {
+        return fallback;
+      }
+
+      if (files.length === 1) {
+        return files[0].name.replace(/\.[^/.]+$/, "");
+      }
+
+      return `${files[0].name.replace(/\.[^/.]+$/, "")}_plus_${files.length - 1}_more`;
+    }
+
     async function removeEntriesAndDownload() {
-      const entriesFile = document.getElementById("entriesFile").files[0];
-      const removeFile = document.getElementById("removeFile").files[0];
+      const entriesFiles = Array.from(document.getElementById("entriesFile").files || []);
+      const removeFiles = Array.from(document.getElementById("removeFile").files || []);
       const manualEmails = document.getElementById("removeEmailsText").value;
       const statusBox = document.getElementById("removeStatus");
 
       statusBox.innerHTML = "";
 
-      if (!entriesFile) {
-        alert("Please upload the entries file first.");
+      if (!entriesFiles.length) {
+        alert("Please upload at least one entries file first.");
         return;
       }
 
@@ -530,37 +542,40 @@ unsubscribe@example.com"></textarea>
       let bouncedCount = 0;
       let matchedBounceFormat = false;
 
-      if (removeFile) {
+      if (removeFiles.length) {
         try {
-          const removeFileData = await getRemovalDataFromFile(removeFile);
-          removeFileData.emails.forEach(email => removalSet.add(email));
-          bouncedCount = removeFileData.bouncedCount;
-          matchedBounceFormat = Boolean(removeFileData.matchedBounceFormat);
+          const removeFileDataList = await Promise.all(removeFiles.map(getRemovalDataFromFile));
+          removeFileDataList.forEach((removeFileData) => {
+            removeFileData.emails.forEach(email => removalSet.add(email));
+            bouncedCount += removeFileData.bouncedCount;
+            matchedBounceFormat = matchedBounceFormat || Boolean(removeFileData.matchedBounceFormat);
+          });
         } catch {
-          alert("Could not read remove entries file.");
+          alert("Could not read one or more remove entries files.");
           return;
         }
       }
 
       if (!removalSet.size) {
-        alert("Please provide at least one valid email in remove entries file or text box.");
+        alert("Please provide at least one valid email in remove entries file(s) or text box.");
         return;
       }
 
-      let entriesText = "";
+      let entryTexts = [];
       try {
-        entriesText = await readFileAsText(entriesFile);
+        entryTexts = await Promise.all(entriesFiles.map(readFileAsText));
       } catch {
-        alert("Could not read entries file.");
+        alert("Could not read one or more entries files.");
         return;
       }
 
-      const entries = splitEntries(entriesText);
+      const entries = entryTexts.flatMap(splitEntries);
+      const removedEntries = entries.filter(entry => entryHasRemovalEmail(entry, removalSet));
       const keptEntries = entries.filter(entry => !entryHasRemovalEmail(entry, removalSet));
-      const removedCount = entries.length - keptEntries.length;
-      const outputName = `${entriesFile.name.replace(/\.[^/.]+$/, "")}_Clean.txt`;
-
-      const removedOutputName = `${entriesFile.name.replace(/\.[^/.]+$/, "")}_Removed.txt`;
+      const removedCount = removedEntries.length;
+      const baseName = buildCombinedBaseName(entriesFiles, "entries");
+      const outputName = `${baseName}_Clean.txt`;
+      const removedOutputName = `${baseName}_Removed.txt`;
 
       removalDownloads = {
         remaining: {
@@ -568,19 +583,21 @@ unsubscribe@example.com"></textarea>
           fileName: outputName
         },
         removed: {
-          content: entries.filter(entry => entryHasRemovalEmail(entry, removalSet)).join("\n\n"),
+          content: removedEntries.join("\n\n"),
           fileName: removedOutputName
         }
       };
 
       const bounceStatusLine = matchedBounceFormat
-        ? `Bounced emails detected in log file: ${bouncedCount}`
-        : "Bounced emails detected in log file: Not found (used all emails from remove file)";
+        ? `Bounced emails detected across remove file(s): ${bouncedCount}`
+        : "Bounced emails detected in remove file(s): Not found (used all emails from the selected remove file(s))";
 
       statusBox.className = "status";
       statusBox.innerHTML = `
         <div class="status-title">Done ✅</div>
         <div class="status-grid">
+          <div class="status-item"><strong>${entriesFiles.length}</strong><span>Entries files</span></div>
+          <div class="status-item"><strong>${removeFiles.length}</strong><span>Remove files</span></div>
           <div class="status-item"><strong>${entries.length}</strong><span>Total entries</span></div>
           <div class="status-item"><strong>${removedCount}</strong><span>Removed entries</span></div>
           <div class="status-item"><strong>${keptEntries.length}</strong><span>Remaining entries</span></div>
