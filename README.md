@@ -552,7 +552,7 @@ unsubscribe@example.com"></textarea>
 
     function buildRemainingCleanBaseName(filename, remainingCount) {
       const baseName = stripExtension(filename);
-      const countLabel = `${remainingCount} Entries-RMC`;
+      const countLabel = `${remainingCount} Entries-CQD`;
       const countPattern = /\((?:\d+\s+Entries(?:-[^)]+)?)\)/i;
 
       if (countPattern.test(baseName)) {
@@ -638,7 +638,7 @@ unsubscribe@example.com"></textarea>
       const baseName = buildCombinedBaseName(entriesFiles, "entries");
       const remainingBaseName = entriesFiles.length === 1
         ? buildRemainingCleanBaseName(entriesFiles[0].name, keptEntries.length)
-        : `${baseName} (${keptEntries.length} Entries-RMC)`;
+        : `${baseName} (${keptEntries.length} Entries-CQD)`;
       const outputName = `${remainingBaseName}.txt`;
       const removedOutputName = `${baseName}_Removed.txt`;
 
