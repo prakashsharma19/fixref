@@ -423,7 +423,7 @@ unsubscribe@example.com"></textarea>
 
     function getBouncedEmailsFromRows(rows) {
       if (!rows.length) {
-        return { emails: new Set(), bouncedCount: 0, matchedBounceFormat: false };
+        return { emails: new Set(), bouncedCount: 0, uniqueBouncedCount: 0, duplicateBouncedCount: 0, matchedBounceFormat: false };
       }
 
       const headerRow = rows[0].map(normalizeHeaderName);
@@ -431,7 +431,7 @@ unsubscribe@example.com"></textarea>
       const toIndex = findColumnIndex(headerRow, ["to", "recipient", "email", "recipientemail", "toemail"]);
 
       if (eventTypeIndex === -1 || toIndex === -1) {
-        return { emails: new Set(), bouncedCount: 0, matchedBounceFormat: false };
+        return { emails: new Set(), bouncedCount: 0, uniqueBouncedCount: 0, duplicateBouncedCount: 0, matchedBounceFormat: false };
       }
 
       const bouncedEmails = new Set();
@@ -443,12 +443,25 @@ unsubscribe@example.com"></textarea>
           return;
         }
 
-        bouncedCount += 1;
         const toValue = String(row[toIndex] || "");
-        parseEmailsFromText(toValue).forEach(email => bouncedEmails.add(email));
+        const rowEmails = parseEmailsFromText(toValue);
+
+        if (!rowEmails.size) {
+          return;
+        }
+
+        bouncedCount += rowEmails.size;
+        rowEmails.forEach(email => bouncedEmails.add(email));
       });
 
-      return { emails: bouncedEmails, bouncedCount, matchedBounceFormat: true };
+      const uniqueBouncedCount = bouncedEmails.size;
+      return {
+        emails: bouncedEmails,
+        bouncedCount,
+        uniqueBouncedCount,
+        duplicateBouncedCount: Math.max(bouncedCount - uniqueBouncedCount, 0),
+        matchedBounceFormat: true
+      };
     }
 
     async function getRemovalDataFromFile(file) {
@@ -471,7 +484,13 @@ unsubscribe@example.com"></textarea>
         const buffer = await file.arrayBuffer();
         const workbook = XLSX.read(buffer, { type: "array" });
 
-        const mergedData = { emails: new Set(), bouncedCount: 0, matchedBounceFormat: false };
+        const mergedData = {
+          emails: new Set(),
+          bouncedCount: 0,
+          uniqueBouncedCount: 0,
+          duplicateBouncedCount: 0,
+          matchedBounceFormat: false
+        };
 
         workbook.SheetNames.forEach((sheetName) => {
           const sheet = workbook.Sheets[sheetName];
@@ -490,14 +509,28 @@ unsubscribe@example.com"></textarea>
               return XLSX.utils.sheet_to_csv(sheet);
             })
             .join("\n");
-          return { emails: parseEmailsFromText(allCellText), bouncedCount: 0, matchedBounceFormat: false };
+          return {
+            emails: parseEmailsFromText(allCellText),
+            bouncedCount: 0,
+            uniqueBouncedCount: 0,
+            duplicateBouncedCount: 0,
+            matchedBounceFormat: false
+          };
         }
 
+        mergedData.uniqueBouncedCount = mergedData.emails.size;
+        mergedData.duplicateBouncedCount = Math.max(mergedData.bouncedCount - mergedData.uniqueBouncedCount, 0);
         return mergedData;
       }
 
       const text = await readFileAsText(file);
-      return { emails: parseEmailsFromText(text), bouncedCount: 0, matchedBounceFormat: false };
+      return {
+        emails: parseEmailsFromText(text),
+        bouncedCount: 0,
+        uniqueBouncedCount: 0,
+        duplicateBouncedCount: 0,
+        matchedBounceFormat: false
+      };
     }
 
     function entryHasRemovalEmail(entry, removalSet) {
@@ -540,13 +573,21 @@ unsubscribe@example.com"></textarea>
 
       const removalSet = parseEmailsFromText(manualEmails.trim());
       let bouncedCount = 0;
+      const bouncedEmailSet = new Set();
+      let uniqueBouncedCount = 0;
+      let duplicateBouncedCount = 0;
       let matchedBounceFormat = false;
 
       if (removeFiles.length) {
         try {
           const removeFileDataList = await Promise.all(removeFiles.map(getRemovalDataFromFile));
           removeFileDataList.forEach((removeFileData) => {
-            removeFileData.emails.forEach(email => removalSet.add(email));
+            removeFileData.emails.forEach((email) => {
+              removalSet.add(email);
+              if (removeFileData.matchedBounceFormat) {
+                bouncedEmailSet.add(email);
+              }
+            });
             bouncedCount += removeFileData.bouncedCount;
             matchedBounceFormat = matchedBounceFormat || Boolean(removeFileData.matchedBounceFormat);
           });
@@ -559,6 +600,11 @@ unsubscribe@example.com"></textarea>
       if (!removalSet.size) {
         alert("Please provide at least one valid email in remove entries file(s) or text box.");
         return;
+      }
+
+      if (matchedBounceFormat) {
+        uniqueBouncedCount = bouncedEmailSet.size;
+        duplicateBouncedCount = Math.max(bouncedCount - uniqueBouncedCount, 0);
       }
 
       let entryTexts = [];
@@ -589,7 +635,7 @@ unsubscribe@example.com"></textarea>
       };
 
       const bounceStatusLine = matchedBounceFormat
-        ? `Bounced emails detected across remove file(s): ${bouncedCount}`
+        ? `Bounced emails detected across remove file(s): ${bouncedCount} total (${duplicateBouncedCount} duplicate, ${uniqueBouncedCount} unique)`
         : "Bounced emails detected in remove file(s): Not found (used all emails from the selected remove file(s))";
 
       statusBox.className = "status";
@@ -602,6 +648,8 @@ unsubscribe@example.com"></textarea>
           <div class="status-item"><strong>${removedCount}</strong><span>Removed entries</span></div>
           <div class="status-item"><strong>${keptEntries.length}</strong><span>Remaining entries</span></div>
           <div class="status-item"><strong>${matchedBounceFormat ? bouncedCount : "N/A"}</strong><span>Bounced emails in log</span></div>
+          <div class="status-item"><strong>${matchedBounceFormat ? duplicateBouncedCount : "N/A"}</strong><span>Duplicate bounced emails</span></div>
+          <div class="status-item"><strong>${matchedBounceFormat ? uniqueBouncedCount : "N/A"}</strong><span>Unique bounced emails</span></div>
         </div>
         <p class="status-note">${bounceStatusLine}</p>
         <div class="download-actions">
