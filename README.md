@@ -546,16 +546,32 @@ unsubscribe@example.com"></textarea>
       link.click();
     }
 
+    function stripExtension(filename) {
+      return filename.replace(/\.[^/.]+$/, "");
+    }
+
+    function buildRemainingCleanBaseName(filename, remainingCount) {
+      const baseName = stripExtension(filename);
+      const countLabel = `${remainingCount} Entries-RMC`;
+      const countPattern = /\((?:\d+\s+Entries(?:-[^)]+)?)\)/i;
+
+      if (countPattern.test(baseName)) {
+        return baseName.replace(countPattern, `(${countLabel})`);
+      }
+
+      return `${baseName} (${countLabel})`;
+    }
+
     function buildCombinedBaseName(files, fallback) {
       if (!files.length) {
         return fallback;
       }
 
       if (files.length === 1) {
-        return files[0].name.replace(/\.[^/.]+$/, "");
+        return stripExtension(files[0].name);
       }
 
-      return `${files[0].name.replace(/\.[^/.]+$/, "")}_plus_${files.length - 1}_more`;
+      return `${stripExtension(files[0].name)}_plus_${files.length - 1}_more`;
     }
 
     async function removeEntriesAndDownload() {
@@ -620,7 +636,10 @@ unsubscribe@example.com"></textarea>
       const keptEntries = entries.filter(entry => !entryHasRemovalEmail(entry, removalSet));
       const removedCount = removedEntries.length;
       const baseName = buildCombinedBaseName(entriesFiles, "entries");
-      const outputName = `${baseName}_Clean.txt`;
+      const remainingBaseName = entriesFiles.length === 1
+        ? buildRemainingCleanBaseName(entriesFiles[0].name, keptEntries.length)
+        : `${baseName} (${keptEntries.length} Entries-RMC)`;
+      const outputName = `${remainingBaseName}.txt`;
       const removedOutputName = `${baseName}_Removed.txt`;
 
       removalDownloads = {
