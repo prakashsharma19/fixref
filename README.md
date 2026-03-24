@@ -421,6 +421,11 @@ unsubscribe@example.com"></textarea>
       return headerRow.findIndex((name) => normalizedAliases.includes(name));
     }
 
+    function hasSmtpBounceCode(value) {
+      const text = String(value || "").trim().toLowerCase();
+      return /^(?:[245]\.\d\.\d|[245]\d{2})\b/.test(text);
+    }
+
     function getBouncedEmailsFromRows(rows) {
       if (!rows.length) {
         return { emails: new Set(), bouncedCount: 0, uniqueBouncedCount: 0, duplicateBouncedCount: 0, matchedBounceFormat: false };
@@ -428,9 +433,10 @@ unsubscribe@example.com"></textarea>
 
       const headerRow = rows[0].map(normalizeHeaderName);
       const eventTypeIndex = findColumnIndex(headerRow, ["eventtype", "event", "status", "type"]);
-      const toIndex = findColumnIndex(headerRow, ["to", "recipient", "email", "recipientemail", "toemail"]);
+      const toIndex = findColumnIndex(headerRow, ["to", "recipient", "email", "recipientemail", "toemail", "recipientaddress", "address"]);
+      const reasonIndex = findColumnIndex(headerRow, ["reason", "message", "error", "details", "description"]);
 
-      if (eventTypeIndex === -1 || toIndex === -1) {
+      if (toIndex === -1 && reasonIndex === -1) {
         return { emails: new Set(), bouncedCount: 0, uniqueBouncedCount: 0, duplicateBouncedCount: 0, matchedBounceFormat: false };
       }
 
@@ -439,12 +445,19 @@ unsubscribe@example.com"></textarea>
 
       rows.slice(1).forEach((row) => {
         const eventType = String(row[eventTypeIndex] || "").trim().toLowerCase();
-        if (!eventType.includes("bounce")) {
+        const reasonValue = String(row[reasonIndex] || "");
+        const isBouncedEvent = eventType.includes("bounce") || eventType.includes("error") || hasSmtpBounceCode(eventType) || hasSmtpBounceCode(reasonValue);
+
+        if (!isBouncedEvent && eventTypeIndex !== -1 && reasonIndex !== -1) {
           return;
         }
 
-        const toValue = String(row[toIndex] || "");
-        const rowEmails = parseEmailsFromText(toValue);
+        const rowText = [
+          toIndex !== -1 ? String(row[toIndex] || "") : "",
+          reasonIndex !== -1 ? reasonValue : ""
+        ].join(" ");
+
+        const rowEmails = parseEmailsFromText(rowText);
 
         if (!rowEmails.size) {
           return;
